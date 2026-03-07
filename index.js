@@ -1,9 +1,24 @@
-import dotenv from 'dotenv';
-import app from './src/app.js';
-import './src/config/db.js';
-dotenv.config({ path: '.env.example' });
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-    console.log(`http://localhost:${PORT}`);
-});
+// index.js
+// Entry point - starts the Express server
+const app = require('./src/app');
+const secrets = require('./secrets');
+const { pool } = require('./src/config/db');
+
+const startServer = async () => {
+  try {
+    // Test database connection
+    const result = await pool.query('SELECT NOW()');
+    console.log('📦 Database time:', result.rows[0].now);
+
+    // Start server
+    app.listen(secrets.PORT, () => {
+      console.log(`🚀 Server running on port ${secrets.PORT}`);
+      console.log(`📍 Environment: ${secrets.NODE_ENV}`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error.message);
+    process.exit(1);
+  }
+};
+
+startServer();

@@ -1,28 +1,32 @@
-import pkg from 'pg';
-import secrets from '../../secrets.js';
+// src/config/db.js
+// PostgreSQL connection using Neon serverless PostgreSQL
+const { Pool } = require('pg');
+const secrets = require('../../secrets');
 
-const { Pool } = pkg;
+const pool = new Pool({
+  connectionString: secrets.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false, // Required for Neon
+  },
+  max: 20,                     // Max connections in pool
+  idleTimeoutMillis: 30000,    // Close idle connections after 30s
+  connectionTimeoutMillis: 2000,
+});
 
-let pool;
+// Test the connection when this module loads
+pool.on('connect', () => {
+  console.log('✅ Connected to Neon PostgreSQL');
+});
 
-if (secrets.databaseUrl) {
-  // Create a real pool only when DATABASE_URL is configured
-  pool = new Pool({
-    connectionString: secrets.databaseUrl,
-    ssl: secrets.nodeEnv === 'production' ? { rejectUnauthorized: false } : false,
-  });
+pool.on('error', (err) => {
+  console.error('❌ Unexpected database error:', err);
+  process.exit(-1);
+});
 
-  pool.connect()
-    .then(() => console.log('✅ Connected to PostgreSQL'))
-    .catch(err => console.error('❌ DB connection error:', err && err.message ? err.message : err));
-} else {
-  // Avoid passing undefined to pg-connection-string.parse which causes the TypeError
-  console.warn('⚠️  DATABASE_URL is not set — DB pool will not be created. Set DATABASE_URL in your .env to enable DB connection.');
-  // Provide a minimal stub so other modules can still import `pool` without crashing.
-  pool = {
-    query: async () => { throw new Error('DATABASE_URL not configured'); },
-    connect: async () => { throw new Error('DATABASE_URL not configured'); },
-  };
-}
+// Helper: run a single query
+const query = (text, params) => pool.query(text, params);
 
-export { pool };
+// Helper: get a client from the pool (for transactions)
+const getClient = () => pool.connect();
+
+module.exports = { pool, query, getClient };
