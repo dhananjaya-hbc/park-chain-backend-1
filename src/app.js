@@ -31,7 +31,9 @@ app.get('/health/db', async (req, res) => {
 
     const tableDetails = [];
     for (const row of tablesResult.rows) {
-      const countResult = await query(`SELECT COUNT(*) as count FROM ${row.table_name}`);
+      const countResult = await query(
+        `SELECT COUNT(*) as count FROM ${row.table_name}`
+      );
       tableDetails.push({
         name: row.table_name,
         rows: parseInt(countResult.rows[0].count)
@@ -48,11 +50,22 @@ app.get('/health/db', async (req, res) => {
   }
 });
 
-// AUTH ROUTES
+// API Routes
 app.use('/api/auth', require('./routes/AuthRoutes'));
+app.use('/api/spots', require('./routes/SpotRoutes'));
+app.use('/api/bookings', require('./routes/BookingRoutes'));
+app.use('/api/payments', require('./routes/Web3Routes'));
 
 app.get('/', (req, res) => {
-  res.json({ message: 'Parking Payment API' });
+  res.json({
+    message: 'Parking Payment API',
+    routes: {
+      auth: '/api/auth',
+      spots: '/api/spots',
+      bookings: '/api/bookings',
+      payments: '/api/payments'
+    }
+  });
 });
 
 // --- 404 HANDLER ---
