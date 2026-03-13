@@ -179,14 +179,15 @@ const generateWallet = async (req, res) => {
 };
 
 // GET /api/payments/balance
+// GET /api/payments/balance
 const getBalance = async (req, res) => {
   try {
-    // Check for funded wallet (with seed)
     const walletDetails = await User.getWalletDetails(req.user.id);
 
-    if (!walletDetails || !walletDetails.wallet_address || !walletDetails.wallet_seed) {
+    // Check wallet_address (not wallet_seed — Xaman users don't have seed)
+    if (!walletDetails || !walletDetails.wallet_address) {
       return res.status(400).json({
-        error: 'No funded wallet linked to your account.',
+        error: 'No wallet linked to your account.',
         code: 'NO_WALLET'
       });
     }
@@ -195,7 +196,8 @@ const getBalance = async (req, res) => {
 
     res.json({
       walletAddress: walletDetails.wallet_address,
-      balanceXrp: balance
+      balanceXrp: balance,
+      hasSeed: !!walletDetails.wallet_seed  // Tells Flutter if user can make payments
     });
   } catch (error) {
     console.error('Get balance error:', error.message);
