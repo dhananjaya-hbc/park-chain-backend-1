@@ -65,16 +65,16 @@ class User {
 
   // Create driver or seller (via Web3Auth — NO password)
   static async createWeb3AuthUser({ email, name, role, walletAddress, web3authSub, profileImage }) {
+    // Don't store Web3Auth-derived wallet_address on creation
+    // Real wallet will be set by generate-wallet endpoint
     const result = await query(
-      `INSERT INTO users (email, name, role, wallet_address, web3auth_sub, profile_image)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, email, name, phone, role, wallet_address,
-                 web3auth_sub, profile_image, is_verified, created_at`,
-      [email, name, role, walletAddress, web3authSub, profileImage]
+      `INSERT INTO users (email, name, role, web3auth_sub, profile_image)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, email, name, phone, role, wallet_address, web3auth_sub, profile_image, is_verified, created_at`,
+      [email, name, role, web3authSub, profileImage]
     );
     return result.rows[0];
   }
-
   // Create admin (with password)
   static async createAdmin({ email, name, hashedPassword }) {
     const result = await query(
@@ -92,21 +92,19 @@ class User {
 
   // Update user info from Web3Auth (on repeat login)
   static async updateWeb3AuthInfo(id, { name, walletAddress, profileImage, web3authSub }) {
+    // NEVER overwrite wallet_address — it should only be set by generate-wallet
     const result = await query(
       `UPDATE users
        SET name = $1,
-           wallet_address = COALESCE($2, wallet_address),
-           profile_image = COALESCE($3, profile_image),
-           web3auth_sub = $4,
+           profile_image = COALESCE($2, profile_image),
+           web3auth_sub = $3,
            updated_at = NOW()
-       WHERE id = $5
-       RETURNING id, email, name, phone, role, wallet_address,
-                 web3auth_sub, profile_image, is_verified, created_at`,
-      [name, walletAddress, profileImage, web3authSub, id]
+       WHERE id = $4
+       RETURNING id, email, name, phone, role, wallet_address, web3auth_sub, profile_image, is_verified, created_at`,
+      [name, profileImage, web3authSub, id]
     );
     return result.rows[0] || null;
   }
-
   // Update wallet info (when generating XRPL wallet)
   static async updateWallet(id, walletAddress, walletSeed) {
     const result = await query(
