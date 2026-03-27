@@ -9,7 +9,7 @@ const pool = new Pool({
   },
   max: 10,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000
+  connectionTimeoutMillis: 30000 // Increased from 10000 to allow Neon database to wake up from sleep
 });
 
 const query = (text, params) => {

@@ -62,6 +62,10 @@ CREATE TABLE IF NOT EXISTS users (
     -- Seller verification: admin must verify before seller can list spots
     is_verified BOOLEAN DEFAULT false,
 
+    -- Seller KYC Status
+    kyc_status VARCHAR(20) DEFAULT 'unverified' 
+        CHECK (kyc_status IN ('unverified', 'pending_review', 'verified', 'rejected')),
+
     -- Timestamps
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -297,6 +301,46 @@ CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(booking_status);
 CREATE INDEX IF NOT EXISTS idx_bookings_payment ON bookings(payment_status);
 CREATE INDEX IF NOT EXISTS idx_transactions_booking ON transactions(booking_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_hash ON transactions(tx_hash);
+
+-- ============================================
+-- TABLE 6: SELLER KYC
+-- ============================================
+CREATE TABLE IF NOT EXISTS seller_kyc (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    
+    -- Links to your existing users table (1-to-1 relationship)
+    user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    
+    -- Personal Information
+    full_name VARCHAR(255) NOT NULL,
+    nic_number VARCHAR(100) NOT NULL,
+    date_of_birth VARCHAR(50) NOT NULL,
+    gender VARCHAR(50),
+    
+    -- Property Information
+    property_name VARCHAR(255),
+    full_address TEXT,
+    maps_link TEXT,
+    parking_type VARCHAR(100),
+    number_of_slots INTEGER,
+    supported_vehicle_types JSONB, -- Stores the JSON array ['Car', 'Bike']
+    ownership_document_type VARCHAR(100),
+    
+    -- Cloudinary Image URLs
+    nic_front_url TEXT,
+    nic_back_url TEXT,
+    selfie_url TEXT,
+    legal_document_url TEXT,
+    utility_bill_url TEXT,
+    
+    -- Miscellaneous
+    agreement_accepted BOOLEAN DEFAULT false,
+    seller_wallet VARCHAR(100),
+    
+    -- Timestamps
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
 
 -- ============================================
