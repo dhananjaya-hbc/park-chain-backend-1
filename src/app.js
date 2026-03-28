@@ -58,6 +58,7 @@ app.use('/api/spots', require('./routes/SpotRoutes'));
 app.use('/api/bookings', require('./routes/BookingRoutes'));
 app.use('/api/payments', require('./routes/Web3Routes'));
 app.use('/api/navigation', require('./routes/NavigationRoutes'));
+app.use('/api/seller', require('./routes/SellerKycRoutes'));
 
 app.get('/', (req, res) => {
   res.json({
