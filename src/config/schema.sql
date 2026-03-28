@@ -336,6 +336,9 @@ CREATE TABLE IF NOT EXISTS seller_kyc (
     -- Miscellaneous
     agreement_accepted BOOLEAN DEFAULT false,
     seller_wallet VARCHAR(100),
+    rejection_reason TEXT,
+    kyc_status VARCHAR(20) DEFAULT 'unverified' 
+        CHECK (kyc_status IN ('unverified', 'pending_review', 'verified', 'rejected')),
     
     -- Timestamps
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

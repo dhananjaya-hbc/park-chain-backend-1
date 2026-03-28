@@ -32,9 +32,9 @@ exports.submitKyc = async (req, res) => {
         user_id, full_name, nic_number, date_of_birth, gender,
         property_name, full_address, maps_link, parking_type, number_of_slots,
         supported_vehicle_types, ownership_document_type, agreement_accepted,
-        nic_front_url, nic_back_url, selfie_url, legal_document_url, utility_bill_url, seller_wallet
+        nic_front_url, nic_back_url, selfie_url, legal_document_url, utility_bill_url, seller_wallet, kyc_status
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, 'pending_review'
       )
       ON CONFLICT (user_id) DO UPDATE SET
         full_name = EXCLUDED.full_name,
@@ -54,6 +54,7 @@ exports.submitKyc = async (req, res) => {
         legal_document_url = EXCLUDED.legal_document_url,
         utility_bill_url = EXCLUDED.utility_bill_url,
         seller_wallet = EXCLUDED.seller_wallet,
+        kyc_status = 'pending_review',
         updated_at = NOW()`,
       [
         userId, fullName, nicNumber, dateOfBirth, gender, propertyName, fullAddress,
@@ -93,7 +94,7 @@ exports.getAllKycApplications = async (req, res) => {
       SELECT 
         k.*, 
         u.email, 
-        u.kyc_status, 
+        k.kyc_status, 
         u.is_verified,
         u.ROLE
       FROM seller_kyc k
@@ -104,7 +105,7 @@ exports.getAllKycApplications = async (req, res) => {
     
     // Filter by status if provided
     if (status) {
-      dbQuery += ` WHERE u.kyc_status = $1`;
+      dbQuery += ` WHERE k.kyc_status = $1`;
       queryParams.push(status);
     }
     
@@ -135,7 +136,6 @@ exports.getKycByUserId = async (req, res) => {
       `SELECT 
         k.*, 
         u.email as account_email, 
-        u.kyc_status, 
         u.is_verified
        FROM seller_kyc k
        JOIN users u ON k.user_id = u.id
@@ -179,11 +179,14 @@ exports.updateKycStatus = async (req, res) => {
       return res.status(400).json({ error: 'Invalid KYC status' });
     }
 
-    // Begin transaction for safety (ensure both kyc_status and is_verified update simultaneously if approved)
+    // Begin transaction for safety
     await query('BEGIN');
 
-    // Update kyc_status
+    // Update kyc_status on user
     await query(`UPDATE users SET kyc_status = $1 WHERE id = $2`, [status, userId]);
+
+    // Also update it on the kyc document
+    await query(`UPDATE seller_kyc SET kyc_status = $1 WHERE user_id = $2`, [status, userId]);
 
     // If verified, mark user account as completely 'is_verified'
     if (status === 'verified') {
@@ -219,7 +222,7 @@ exports.getKycStatusByEmail = async (req, res) => {
     }
 
     const result = await query(
-      `SELECT kyc_status FROM users WHERE email = $1`,
+      `SELECT kyc_status FROM seller_kyc k JOIN users u ON k.user_id = u.id WHERE u.email = $1`,
       [email]
     );
 
