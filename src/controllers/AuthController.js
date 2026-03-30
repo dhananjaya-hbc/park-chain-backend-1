@@ -66,6 +66,54 @@ const web3AuthLogin = async (req, res) => {
   }
 };
 
+// POST /api/auth/xaman — Register/login via Xaman wallet
+const xamanLogin = async (req, res) => {
+  try {
+    const { wallet_address, role } = req.body;
+
+    if (!wallet_address) {
+      return res.status(400).json({
+        error: 'wallet_address is required from Xaman.'
+      });
+    }
+
+    const userRole = role === 'seller' ? 'seller' : 'driver';
+
+    let user = await User.findByWalletAddress(wallet_address);
+
+    if (user) {
+      console.log(`🔑 Existing ${user.role} logged in via Xaman: ${user.wallet_address}`);
+    } else {
+      user = await User.createXamanUser({
+        walletAddress: wallet_address,
+        role: userRole
+      });
+      console.log(`🆕 New ${user.role} registered via Xaman: ${user.wallet_address}`);
+    }
+
+    // ★ GENERATE JWT TOKEN
+    const token = generateToken(user.id, user.role);
+
+    res.status(200).json({
+      message: 'Xaman authentication successful',
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        wallet_address: user.wallet_address,
+        profile_image: user.profile_image,
+        auth_type: user.auth_type,
+        created_at: user.created_at
+      }
+    });
+  } catch (error) {
+    console.error('Xaman login error:', error.message);
+    res.status(500).json({ error: 'Registration failed. Please try again.' });
+  }
+};
+
 // POST /api/auth/admin/login — Admin login
 const adminLogin = async (req, res) => {
   try {
@@ -127,4 +175,4 @@ const getMe = async (req, res) => {
   }
 };
 
-module.exports = { web3AuthLogin, adminLogin, getMe };
+module.exports = { web3AuthLogin, xamanLogin, adminLogin, getMe };
