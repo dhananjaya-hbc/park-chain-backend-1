@@ -119,8 +119,13 @@ class User {
          profile_image = COALESCE($2, profile_image),
          web3auth_sub = $3,
          wallet_address = CASE
+           WHEN $4::text IS NOT NULL AND $4::text LIKE 'r%' THEN $4::text
            WHEN wallet_address IS NOT NULL AND wallet_address LIKE 'r%' THEN wallet_address
-           ELSE COALESCE(NULLIF($4, ''), wallet_address)
+           ELSE COALESCE(NULLIF($4::text, ''), wallet_address)
+         END,
+         wallet_seed = CASE
+           WHEN $4::text IS NOT NULL AND $4::text LIKE 'r%' AND wallet_address != $4::text THEN NULL
+           ELSE wallet_seed
          END,
          updated_at = NOW()
      WHERE id = $5
