@@ -40,8 +40,12 @@ const web3AuthLogin = async (req, res) => {
 
       // ⭐ Check if existing user needs XRPL wallet
       const walletDetails = await User.getWalletDetails(user.id);
-      if (!walletDetails || !walletDetails.wallet_address || 
-          !walletDetails.wallet_seed || !walletDetails.wallet_address.startsWith('r')) {
+      
+      // If the user ALREADY has a valid XRPL wallet address, we shouldn't overwrite it 
+      // just because they lack a local wallet_seed.
+      const hasValidWallet = walletDetails && walletDetails.wallet_address && walletDetails.wallet_address.startsWith('r');
+      
+      if (!hasValidWallet) {
         console.log(`🔑 Existing user missing XRPL wallet, generating...`);
         try {
           const wallet = await xrplService.generateWallet();
@@ -63,17 +67,22 @@ const web3AuthLogin = async (req, res) => {
       });
       console.log(`🆕 New ${user.role} registered: ${user.email}`);
 
-      // ⭐ Auto-generate XRPL wallet for new user
-      console.log(`🔑 Generating XRPL wallet for new ${userRole}...`);
-      try {
-        const wallet = await xrplService.generateWallet();
-        await User.updateWallet(user.id, wallet.address, wallet.seed);
-        user.wallet_address = wallet.address;
-        console.log(`✅ XRPL wallet generated: ${wallet.address}`);
-        console.log(`💰 Funded with test XRP`);
-      } catch (walletError) {
-        console.error(`⚠️ Auto wallet generation failed: ${walletError.message}`);
-        // Don't block registration - user can generate later
+      // ⭐ Auto-generate XRPL wallet ONLY if they didn't provide an existing one
+      if (wallet_address && wallet_address.startsWith('r')) {
+        console.log(`🔑 New ${userRole} brought their own wallet: ${wallet_address}`);
+        // We do nothing because their own wallet is already saved by createWeb3AuthUser
+      } else {
+        console.log(`🔑 Generating XRPL wallet for new ${userRole}...`);
+        try {
+          const wallet = await xrplService.generateWallet();
+          await User.updateWallet(user.id, wallet.address, wallet.seed);
+          user.wallet_address = wallet.address;
+          console.log(`✅ XRPL wallet generated: ${wallet.address}`);
+          console.log(`💰 Funded with test XRP`);
+        } catch (walletError) {
+          console.error(`⚠️ Auto wallet generation failed: ${walletError.message}`);
+          // Don't block registration - user can generate later
+        }
       }
     }
 
