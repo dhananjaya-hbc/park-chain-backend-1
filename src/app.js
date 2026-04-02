@@ -11,6 +11,7 @@ app.use(express.json());
 
 // --- ROUTES ---
 
+
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -31,7 +32,9 @@ app.get('/health/db', async (req, res) => {
 
     const tableDetails = [];
     for (const row of tablesResult.rows) {
-      const countResult = await query(`SELECT COUNT(*) as count FROM ${row.table_name}`);
+      const countResult = await query(
+        `SELECT COUNT(*) as count FROM ${row.table_name}`
+      );
       tableDetails.push({
         name: row.table_name,
         rows: parseInt(countResult.rows[0].count)
@@ -48,11 +51,25 @@ app.get('/health/db', async (req, res) => {
   }
 });
 
-// AUTH ROUTES
+// API Routes
 app.use('/api/auth', require('./routes/AuthRoutes'));
+app.use('/api/auth/xumm', require('./routes/XummRoutes')); 
+app.use('/api/spots', require('./routes/SpotRoutes'));
+app.use('/api/bookings', require('./routes/BookingRoutes'));
+app.use('/api/payments', require('./routes/PaymentRoutes'));
+app.use('/api/navigation', require('./routes/NavigationRoutes'));
 
 app.get('/', (req, res) => {
-  res.json({ message: 'Parking Payment API' });
+  res.json({
+    message: 'Parking Payment API',
+    routes: {
+      auth: '/api/auth',
+      spots: '/api/spots',
+      bookings: '/api/bookings',
+      payments: '/api/payments',
+      navigation: '/api/navigation'
+    }
+  });
 });
 
 // --- 404 HANDLER ---
