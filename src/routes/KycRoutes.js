@@ -6,7 +6,10 @@ const KycController = require('../controllers/KycController');
 // 1. Create Didit Session (Must be authenticated)
 router.post('/create-didit-session', authMiddleware, KycController.createSession);
 
-// 2. Didit Webhook Endpoint (Public, verified via signature/secret)
+// 2. Check Didit Session Status Manually (Must be authenticated)
+router.get('/kyc-status', authMiddleware, KycController.checkSessionStatus);
+
+// 3. Didit Webhook Endpoint (Public, verified via signature/secret)
 // We typically use express.json() which is already active globally in app.js
 router.post('/webhooks/didit', KycController.handleWebhook);
 
