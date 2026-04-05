@@ -33,8 +33,8 @@ CREATE TABLE IF NOT EXISTS users (
     
     profile_image TEXT,
     kyc_session_id VARCHAR(255),
+    kyc_status VARCHAR(50) DEFAULT 'unverified',
     auth_type VARCHAR(20) DEFAULT 'xaman',
-    is_verified BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

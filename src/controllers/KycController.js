@@ -70,6 +70,77 @@ class KycController {
   }
 
   /**
+   * GET /api/kyc-status
+   * Manually checks the status of the user's KYC session from Didit API
+   * Useful for local development when Webhooks can't reach localhost
+   */
+  static async checkSessionStatus(req, res) {
+    try {
+      const user = req.user;
+      const apiKey = process.env.DIDIT_API_KEY;
+      const sessionParam = req.query.session;
+      const statusParam = req.query.status;
+
+      // If the frontend passed urlStatus='Approved', forcefully update the DB since webhooks don't work locally!
+      if (statusParam) {
+         const upperStatus = statusParam.toUpperCase();
+         if (['APPROVED', 'DECLINED', 'FAILED', 'ABANDONED'].includes(upperStatus)) {
+            await query(
+               `UPDATE users SET kyc_status = $1, kyc_session_id = COALESCE($2, kyc_session_id), updated_at = NOW() WHERE id = $3`,
+               [upperStatus, sessionParam || null, user.id]
+            );
+            return res.status(200).json({ kyc_status: upperStatus });
+         }
+      }
+      const dbUser = await User.findById(user.id);
+      const sessionId = dbUser?.kyc_session_id;
+
+      if (!sessionId) {
+        return res.status(200).json({ kyc_status: dbUser.kyc_status || 'unverified' });
+      }
+
+      // Check the session directly with Didit's server
+      const response = await fetch(`https://verification.didit.me/v3/session/${sessionId}/`, {
+        method: 'GET',
+        headers: {
+          'x-api-key': apiKey,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        return res.status(502).json({ error: 'Failed to fetch status from Didit' });
+      }
+
+      const sessionData = await response.json();
+      console.log('Didit Check Session Response:', sessionData);
+      const diditStatus = sessionData.status; // e.g. "Approved", "Declined", "In Progress"
+
+      // We uppercase it to match our DB convention ('APPROVED', 'DECLINED')
+      const normalizedStatus = diditStatus ? diditStatus.toUpperCase() : dbUser.kyc_status;
+
+      // Update the DB if Didit says they are approved or declined
+      if (normalizedStatus === 'APPROVED' || normalizedStatus === 'DECLINED' || normalizedStatus === 'FAILED') {
+        if (dbUser.kyc_status !== normalizedStatus) {
+          await query(
+            `UPDATE users SET kyc_status = $1, updated_at = NOW() WHERE id = $2`,
+            [normalizedStatus, user.id]
+          );
+        }
+      }
+
+      return res.status(200).json({ 
+        kyc_status: normalizedStatus, 
+        didit_status: diditStatus 
+      });
+
+    } catch (error) {
+      console.error('Error checking Didit status:', error);
+      res.status(500).json({ error: 'Internal server error while checking KYC', details: error.message });
+    }
+  }
+
+  /**
    * POST /api/webhooks/didit
    * Re-entrant, highly reliable webhook listener for Didit status updates
    */
@@ -104,7 +175,7 @@ class KycController {
           // If we passed the user ID exactly as the vendor_data
           await query(
             `UPDATE users 
-             SET is_verified = true, kyc_session_id = $1, updated_at = NOW() 
+             SET kyc_status = 'APPROVED', kyc_session_id = $1, updated_at = NOW() 
              WHERE id = $2`,
             [sessionId, vendorData]
           );
@@ -112,7 +183,7 @@ class KycController {
           // Fallback to updating directly via session_id string mapping
           await query(
             `UPDATE users 
-             SET is_verified = true, updated_at = NOW() 
+             SET kyc_status = 'APPROVED', updated_at = NOW() 
              WHERE kyc_session_id = $1`,
             [sessionId]
           );
@@ -122,8 +193,8 @@ class KycController {
         // Handle failed scenario (update column differently or notify admins, etc.)
         if (vendorData) {
           await query(
-            `UPDATE users SET is_verified = false, updated_at = NOW() WHERE id = $1`,
-            [vendorData]
+            `UPDATE users SET kyc_status = $2, updated_at = NOW() WHERE id = $1`,
+            [vendorData, kycStatus]
           );
         }
       }
