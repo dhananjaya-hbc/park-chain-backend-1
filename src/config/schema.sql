@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS kyb_submissions (
     spot_type VARCHAR(50) CHECK (spot_type IN ('garage', 'open', 'covered', 'driveway', 'underground')),
     document_url TEXT,
     status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    admin_notes TEXT,
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

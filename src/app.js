@@ -63,6 +63,9 @@ app.use('/api/navigation', require('./routes/NavigationRoutes'));
 app.use('/api', require('./routes/KycRoutes'));
 app.use('/api/kyb', require('./routes/KybRoutes'));
 
+// Admin Dashboard Routes
+app.use('/api/admin/kyb', require('./routes/AdminKybRoutes'));
+
 app.get('/', (req, res) => {
   res.json({
     message: 'Parking Payment API',
