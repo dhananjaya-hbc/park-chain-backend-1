@@ -2,12 +2,6 @@
 // ============================================
 // BOOKING MODEL
 // ============================================
-// Handles all database operations for bookings
-//
-// Key concept: Expected vs Actual duration
-//   - Expected: what driver booked (set at creation)
-//   - Actual: how long driver really stayed (set at checkout)
-//   - If actual > expected → overtime charges apply
 
 const { query } = require('../config/db');
 
@@ -15,15 +9,11 @@ class Booking {
   // ============================================
   // CREATE a new booking
   // ============================================
-  // Called when driver selects a spot and time
-// ============================================
-  // CREATE a new booking
-  // ============================================
   static async create({
     driverId, spotId, ownerId,
     startTime, endTime, expectedDurationHours,
-    vehicleType,       // ⭐ NEW: Which vehicle type
-    pricePerHour,      // ⭐ Vehicle-specific price
+    vehicleType,
+    pricePerHour,
     expectedPriceXrp, totalPriceXrp,
     adminFeeXrp, sellerAmountXrp, vehicleNumber
   }) {
@@ -38,7 +28,7 @@ class Booking {
       [
         driverId, spotId, ownerId,
         startTime, endTime, expectedDurationHours,
-        vehicleType,      // ⭐ NEW
+        vehicleType,
         pricePerHour,
         expectedPriceXrp, totalPriceXrp,
         adminFeeXrp, sellerAmountXrp, vehicleNumber
@@ -47,20 +37,22 @@ class Booking {
     return result.rows[0];
   }
 
-
   // ============================================
   // FIND booking by ID (with full details)
   // ============================================
-  // Joins 3 tables: bookings + spots + users (driver and owner)
   static async findById(id) {
     const result = await query(
       `SELECT b.*,
-              s.title AS spot_title, 
+              b.actual_start_time + (b.expected_duration_hours * INTERVAL '1 hour') AS expiry_time,
+              s.title AS spot_title,
               s.address AS spot_address,
               s.latitude AS spot_latitude,
               s.longitude AS spot_longitude,
               s.image_urls AS spot_images,
-              d.name AS driver_name, 
+              s.vehicle_types AS spot_vehicle_types,
+              s.slots_per_type AS spot_slots_per_type,
+              s.prices_per_hour AS spot_prices_per_hour,
+              d.name AS driver_name,
               d.email AS driver_email,
               d.wallet_address AS driver_wallet,
               o.name AS owner_name,
@@ -81,8 +73,9 @@ class Booking {
   // ============================================
   static async findByDriver(driverId, status = null) {
     let sql = `
-      SELECT b.*, 
-             s.title AS spot_title, 
+      SELECT b.*,
+             b.actual_start_time + (b.expected_duration_hours * INTERVAL '1 hour') AS expiry_time,
+             s.title AS spot_title,
              s.address AS spot_address,
              s.latitude AS spot_latitude,
              s.longitude AS spot_longitude,
@@ -91,10 +84,9 @@ class Booking {
       JOIN spots s ON b.spot_id = s.id
       JOIN users o ON b.owner_id = o.id
       WHERE b.driver_id = $1`;
-    
+
     const params = [driverId];
 
-    // Optionally filter by status
     if (status) {
       sql += ' AND b.booking_status = $2';
       params.push(status);
@@ -111,7 +103,8 @@ class Booking {
   // ============================================
   static async findByOwner(ownerId, status = null) {
     let sql = `
-      SELECT b.*, 
+      SELECT b.*,
+             b.actual_start_time + (b.expected_duration_hours * INTERVAL '1 hour') AS expiry_time,
              s.title AS spot_title,
              d.name AS driver_name,
              d.email AS driver_email,
@@ -140,6 +133,7 @@ class Booking {
   static async findAll() {
     const result = await query(
       `SELECT b.*,
+              b.actual_start_time + (b.expected_duration_hours * INTERVAL '1 hour') AS expiry_time,
               s.title AS spot_title,
               d.name AS driver_name,
               o.name AS owner_name
@@ -197,18 +191,9 @@ class Booking {
   }
 
   // ============================================
-  // CHECK OUT - driver leaves the spot
+  // CHECK OUT THE BOOKING
   // ============================================
-  // This is where overtime is calculated!
-  //
-  // Steps:
-  //   1. Set actual_end_time = NOW()
-  //   2. Calculate actual_duration_hours
-  //   3. If actual > expected → calculate overtime
-  //   4. Update total_price with overtime charges
-  //   5. Recalculate admin fee and seller amount
   static async checkOut(id) {
-    // First, get the booking to calculate overtime
     const booking = await query(
       'SELECT * FROM bookings WHERE id = $1 AND booking_status = $2',
       [id, 'active']
@@ -220,19 +205,16 @@ class Booking {
     const now = new Date();
     const actualStart = new Date(b.actual_start_time);
 
-    // Calculate actual duration in hours
     const actualDurationMs = now - actualStart;
     const actualDurationHours = parseFloat(
       (actualDurationMs / (1000 * 60 * 60)).toFixed(2)
     );
 
-    // Calculate overtime
     const expectedHours = parseFloat(b.expected_duration_hours);
-    const overtimeHours = Math.max(0, 
+    const overtimeHours = Math.max(0,
       parseFloat((actualDurationHours - expectedHours).toFixed(2))
     );
 
-    // Calculate prices
     const pricePerHour = parseFloat(b.price_per_hour);
     const overtimePrice = parseFloat((overtimeHours * pricePerHour).toFixed(6));
     const totalPrice = parseFloat(
@@ -241,7 +223,6 @@ class Booking {
     const adminFee = parseFloat((totalPrice * 0.20).toFixed(6));
     const sellerAmount = parseFloat((totalPrice * 0.80).toFixed(6));
 
-    // Update the booking
     const result = await query(
       `UPDATE bookings
        SET actual_end_time = NOW(),
@@ -266,11 +247,10 @@ class Booking {
   // CANCEL booking
   // ============================================
   static async cancel(id, userId) {
-    // Only allow cancelling pending or confirmed bookings
     const result = await query(
       `UPDATE bookings
        SET booking_status = 'cancelled', updated_at = NOW()
-       WHERE id = $1 
+       WHERE id = $1
          AND (driver_id = $2 OR owner_id = $2)
          AND booking_status IN ('pending', 'confirmed')
        RETURNING *`,
@@ -279,30 +259,20 @@ class Booking {
     return result.rows[0] || null;
   }
 
-    // ============================================
-  // COUNT OVERLAPPING BOOKINGS for a time range
   // ============================================
-  // Checks how many active bookings overlap with the requested time
-  //
-  // Time overlap logic:
-  //   Existing:  |----A----|
-  //   Request 1:      |----B----|     ← OVERLAPS (B starts before A ends)
-  //   Request 2:                |--C--|  ← NO OVERLAP (C starts after A ends)
-  //   Request 3: |--D--|              ← OVERLAPS (D ends after A starts)
-  //
-  // SQL: A overlaps B when: A.start < B.end AND A.end > B.start
+  // COUNT OVERLAPPING BOOKINGS (TOTAL - legacy)
+  // ============================================
   static async countOverlapping(spotId, startTime, endTime, excludeBookingId = null) {
     let sql = `
-      SELECT COUNT(*) as count 
-      FROM bookings 
-      WHERE spot_id = $1 
-        AND start_time < $3 
+      SELECT COUNT(*) as count
+      FROM bookings
+      WHERE spot_id = $1
+        AND start_time < $3
         AND end_time > $2
         AND booking_status IN ('pending', 'confirmed', 'active')
     `;
     const params = [spotId, startTime, endTime];
 
-    // Exclude a specific booking (useful for rebooking)
     if (excludeBookingId) {
       sql += ` AND id != $4`;
       params.push(excludeBookingId);
@@ -310,6 +280,59 @@ class Booking {
 
     const result = await query(sql, params);
     return parseInt(result.rows[0].count);
+  }
+
+  // ============================================
+  // COUNT OVERLAPPING BOOKINGS PER VEHICLE TYPE
+  // ✅ THIS IS THE KEY FIX
+  // Checks only bookings for the same vehicle type
+  // against that vehicle type's slot count
+  // ============================================
+  static async countOverlappingByVehicleType(
+    spotId,
+    vehicleType,
+    startTime,
+    endTime,
+    excludeBookingId = null
+  ) {
+    let sql = `
+      SELECT COUNT(*) as count
+      FROM bookings
+      WHERE spot_id = $1
+        AND vehicle_type = $2
+        AND start_time < $4
+        AND end_time > $3
+        AND booking_status IN ('pending', 'confirmed', 'active')
+    `;
+    const params = [spotId, vehicleType, startTime, endTime];
+
+    if (excludeBookingId) {
+      sql += ` AND id != $5`;
+      params.push(excludeBookingId);
+    }
+
+    const result = await query(sql, params);
+    return parseInt(result.rows[0].count);
+  }
+
+  // ============================================
+  // GET AVAILABILITY for a spot on a time range
+  // Returns per-vehicle-type availability info
+  // ============================================
+  static async getAvailabilityByTimeRange(spotId, startTime, endTime) {
+    const result = await query(
+      `SELECT 
+         vehicle_type,
+         COUNT(*) as booked_count
+       FROM bookings
+       WHERE spot_id = $1
+         AND start_time < $3
+         AND end_time > $2
+         AND booking_status IN ('pending', 'confirmed', 'active')
+       GROUP BY vehicle_type`,
+      [spotId, startTime, endTime]
+    );
+    return result.rows;
   }
 }
 

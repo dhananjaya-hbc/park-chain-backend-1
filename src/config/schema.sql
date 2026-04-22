@@ -32,8 +32,28 @@ CREATE TABLE IF NOT EXISTS users (
     wallet_address VARCHAR(60),
     
     profile_image TEXT,
+    kyc_session_id VARCHAR(255),
+    kyc_status VARCHAR(50) DEFAULT 'unverified',
     auth_type VARCHAR(20) DEFAULT 'xaman',
-    is_verified BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ============================================
+-- TABLE 2.5: KYB_Submissions
+-- ============================================
+CREATE TABLE IF NOT EXISTS kyb_submissions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    
+    entity_name VARCHAR(255) NOT NULL,
+    address TEXT NOT NULL,
+    google_maps_link VARCHAR(500),
+    spot_type VARCHAR(50) CHECK (spot_type IN ('garage', 'open', 'covered', 'driveway', 'underground')),
+    document_url TEXT,
+    status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    admin_notes TEXT,
+    
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -54,12 +74,14 @@ CREATE TABLE IF NOT EXISTS spots (
     longitude DECIMAL(11, 8) NOT NULL,
 
     vehicle_types TEXT[] DEFAULT ARRAY['Car'],
+    slots_per_type INTEGER[] DEFAULT ARRAY[1],
     prices_per_hour DECIMAL(10, 2)[] DEFAULT ARRAY[10.0],
 
     image_urls TEXT[],
+    amenities TEXT[] DEFAULT ARRAY[]::TEXT[],
 
     is_available BOOLEAN DEFAULT true,
-    is_approved BOOLEAN DEFAULT false,
+    is_approved BOOLEAN DEFAULT true,
 
     total_slots INTEGER DEFAULT 1,
     available_slots INTEGER DEFAULT 1,
