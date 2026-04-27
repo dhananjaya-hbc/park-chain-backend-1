@@ -6,7 +6,8 @@ const buildProfileResponse = (user) => {
     userId: user.id,
     fullName: user.name || null,
     phoneNumber: user.phone || null,
-    licenseNo: user.license_no || null
+    licenseNo: user.license_no || null,
+    profileImageUrl: user.profile_image || null
   };
 
   if (user.vehicle_type) {
@@ -70,8 +71,35 @@ const getProfile = async (req, res) => {
   }
 };
 
+const uploadProfileImage = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided' });
+    }
+
+    const profileImage = req.file.path;
+    
+    const updatedUser = await User.updateProfile(userId, { profileImage });
+    
+    if (!updatedUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.status(200).json({
+      success: true,
+      imageUrl: updatedUser.profile_image
+    });
+  } catch (error) {
+    console.error('Upload profile image error:', error.message);
+    res.status(500).json({ error: 'Failed to upload profile image' });
+  }
+};
+
 module.exports = {
   updateProfile,
   getProfile,
+  uploadProfileImage,
   buildProfileResponse
 };
