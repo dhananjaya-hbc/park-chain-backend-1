@@ -2,6 +2,7 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
+const { buildProfileResponse } = require('./UserController');
 require('dotenv').config();
 
 const generateToken = (userId, role) => {
@@ -51,6 +52,8 @@ const xamanLogin = async (req, res) => {
         profile_image: user.profile_image,
         auth_type: user.auth_type,
         kyc_status: user.kyc_status,
+        license_no: user.license_no,
+        vehicle_type: user.vehicle_type,
         created_at: user.created_at
       }
     });
@@ -163,10 +166,12 @@ const changePassword = async (req, res) => {
 
 const getMe = async (req, res) => {
   try {
-    res.json({
-      user: req.user,
-      authType: req.authType
-    });
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.status(200).json(buildProfileResponse(user));
   } catch (error) {
     res.status(500).json({ error: 'Failed to get user info.' });
   }

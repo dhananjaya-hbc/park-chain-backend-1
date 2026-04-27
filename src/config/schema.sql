@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS users (
     -- Admin: set in .env (not here)
     wallet_address VARCHAR(60),
     
+    license_no VARCHAR(255),
+    vehicle_type VARCHAR(50),
+    
     profile_image TEXT,
     kyc_session_id VARCHAR(255),
     kyc_status VARCHAR(50) DEFAULT 'unverified',
@@ -65,6 +68,7 @@ CREATE TABLE IF NOT EXISTS spots (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
     owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kyb_submission_id UUID UNIQUE REFERENCES kyb_submissions(id) ON DELETE CASCADE,
 
     title VARCHAR(255) NOT NULL,
     description TEXT,
@@ -78,7 +82,6 @@ CREATE TABLE IF NOT EXISTS spots (
     prices_per_hour DECIMAL(10, 2)[] DEFAULT ARRAY[10.0],
 
     image_urls TEXT[],
-    amenities TEXT[] DEFAULT ARRAY[]::TEXT[],
 
     is_available BOOLEAN DEFAULT true,
     is_approved BOOLEAN DEFAULT true,

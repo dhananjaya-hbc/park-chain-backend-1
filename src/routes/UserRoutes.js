@@ -1,14 +1,17 @@
-import express from 'express';
-import { authenticate } from '../middleware/AuthMiddleware.js';
-import { authorize } from '../middleware/RoleMiddleware.js';
+const express = require('express');
+const authMiddleware = require('../middleware/AuthMiddleware');
+const UserController = require('../controllers/UserController');
+const { profileUpload } = require('../config/cloudinary');
+
 const router = express.Router();
 
-router.get('/profile', authenticate, (req, res) => {
-  res.json({ message: `Welcome user ${req.user.id}`, role: req.user.role });
-});
+// GET /api/users/profile - Gets current user profile in canonical shape
+router.get('/profile', authMiddleware, UserController.getProfile);
 
-router.get('/admin', authenticate, authorize('admin'), (req, res) => {
-  res.json({ message: 'Admin access granted!' });
-});
+// PUT /api/users/profile - Updates user profile (name, licensePlate, etc)
+router.put('/profile', authMiddleware, UserController.updateProfile);
 
-export default router;
+// POST /api/users/profile/image - Uploads user profile image
+router.post('/profile/image', authMiddleware, profileUpload.single('image'), UserController.uploadProfileImage);
+
+module.exports = router;
