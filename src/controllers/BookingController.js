@@ -3,7 +3,7 @@
 const Booking = require('../models/Booking');
 const Spot = require('../models/Spot');
 const FraudDetectionService = require('../services/FraudDetectionService');
-const { calculateDistance } = require('../utils/geoUtils');
+
 
 // ============================================
 // POST /api/bookings — Create a booking
@@ -414,8 +414,6 @@ module.exports = {
   getSpotAvailability,
   getBookings,
   getBookingById,
-  checkIn,
-  checkOut,
   cancelBooking,
   fraudCheck
 };
