@@ -71,7 +71,6 @@ class XrplService {
 
       const tx = response.result;
       const isSuccess = tx.meta.TransactionResult === 'tesSUCCESS';
-
       // Check if the payment was actually sent TO the Admin
       const adminAddress = process.env.ADMIN_WALLET_ADDRESS;
       const isSentToAdmin = tx.Destination === adminAddress;

@@ -1,5 +1,4 @@
 const KybSubmission = require('../models/KybSubmission');
-
 class KybController {
   /**
    * POST /api/kyb
