@@ -6,7 +6,11 @@ const { query } = require('./config/db');
 const app = express();
 
 // --- MIDDLEWARE ---
-app.use(cors());
+app.use(cors({
+  origin: ['https://park-chain-web.vercel.app/', 'http://localhost:3000'], // Allow production and local dev
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true
+}));
 app.use(express.json());
 
 // --- ROUTES ---
