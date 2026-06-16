@@ -71,6 +71,31 @@ app.get('/health/db', async (req, res) => {
     res.status(500).json({ status: 'error', error: error.message });
   }
 });
+// API Routes
+
+app.use('/api/auth', require('./routes/AuthRoutes'));
+app.use('/api/users', require('./routes/UserRoutes'));
+app.use('/api/auth/xumm', require('./routes/XummRoutes')); 
+app.use('/api/spots', require('./routes/SpotRoutes'));
+app.use('/api/bookings', require('./routes/BookingRoutes'));
+app.use('/api/payments', require('./routes/PaymentRoutes'));
+app.use('/api/navigation', require('./routes/NavigationRoutes'));
+
+// KYC / Didit Webhooks Routes
+app.use('/api', require('./routes/KycRoutes'));
+app.use('/api/kyb', require('./routes/KybRoutes'));
+
+// Admin Dashboard Routes
+app.use('/api/admin/kyb', require('./routes/AdminKybRoutes'));
+
+// Seller Dashboard Routes
+app.use('/api/seller/kyb', require('./routes/SellerKybRoutes'));
+
+// Notifications Routes
+app.use('/api/notifications', require('./routes/NotificationRoutes'));
+
+// Reviews Routes
+app.use('/api/reviews', require('./routes/ReviewRoutes'));
 
 
 app.get('/notifications', async (req, res) => {
