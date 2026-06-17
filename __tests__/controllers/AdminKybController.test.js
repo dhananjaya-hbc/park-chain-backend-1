@@ -2,7 +2,7 @@
 
 jest.mock('../../src/models/KybSubmission');
 jest.mock('../../src/models/User');
-jest.mock('../../src/events/notificationEvents', () => ({
+jest.mock('../../src/events/NotificationEvents', () => ({
     fireEvent: jest.fn(),
     EVENTS: {
         KYB_VERIFIED: 'KYB_VERIFIED',

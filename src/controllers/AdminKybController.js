@@ -1,7 +1,7 @@
 const KybSubmission = require('../models/KybSubmission');
 const User = require('../models/User');
 const { query } = require('../config/db');
-const { fireEvent , EVENTS } = require('../events/notificationEvents');
+const { fireEvent , EVENTS } = require('../events/NotificationEvents');
 
 class AdminKybController {
   /**

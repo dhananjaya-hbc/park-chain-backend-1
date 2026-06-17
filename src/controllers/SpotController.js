@@ -7,7 +7,7 @@
 const Spot = require('../models/Spot');
 const KybSubmission = require('../models/KybSubmission');
 const { query } = require('../config/db');
-const { fireEvent , EVENTS } = require('../events/notificationEvents');
+const { fireEvent , EVENTS } = require('../events/NotificationEvents');
 
 // ============================================
 // POST /api/spots — Create a new spot (seller only)
