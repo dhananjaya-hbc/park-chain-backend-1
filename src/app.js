@@ -60,6 +60,8 @@ app.use('/api/bookings/check', require('./routes/BookingCheckRoutes'));
 app.use('/api/payments', require('./routes/PaymentRoutes'));
 app.use('/api/navigation', require('./routes/NavigationRoutes'));
 app.use('/api/utils', require('./routes/UtilsRoutes'));
+app.use('/api/notifications', require('./routes/NotificationRoutes'));
+app.use('/api/reviews', require('./routes/ReviewRoutes'));
 
 // KYC / Didit Webhooks Routes
 app.use('/api', require('./routes/KycRoutes'));

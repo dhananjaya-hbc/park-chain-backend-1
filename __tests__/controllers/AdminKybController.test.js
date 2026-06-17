@@ -2,6 +2,13 @@
 
 jest.mock('../../src/models/KybSubmission');
 jest.mock('../../src/models/User');
+jest.mock('../../src/events/notificationEvents', () => ({
+    fireEvent: jest.fn(),
+    EVENTS: {
+        KYB_VERIFIED: 'KYB_VERIFIED',
+        KYB_REJECTED: 'KYB_REJECTED'
+    }
+}));
 jest.mock('../../src/config/db', () => ({
     query: jest.fn()
 }));
