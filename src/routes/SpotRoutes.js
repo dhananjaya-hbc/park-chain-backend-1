@@ -13,6 +13,7 @@
 //   PUT    /api/spots/:id/approve  → Approve spot (admin only)
 //   PUT    /api/spots/:id/admin-toggle → Toggle active status (admin only)
 //   DELETE /api/spots/:id/reject   → Reject spot (admin only)
+//   GET    /api/spots/:id/min-slots → Min safe slots per vehicle type (seller only)
 
 const router = require('express').Router();
 const SpotController = require('../controllers/SpotController');
@@ -30,6 +31,7 @@ router.post('/', authMiddleware, roleMiddleware('seller'), spotUpload.array('ima
 router.put('/:id', authMiddleware, roleMiddleware('seller'), spotUpload.array('images'), SpotController.updateSpot);
 router.put('/:id/toggle', authMiddleware, roleMiddleware('seller'), SpotController.toggleAvailability);
 router.delete('/:id', authMiddleware, roleMiddleware('seller'), SpotController.deleteSpot);
+router.get('/:id/min-slots', authMiddleware, roleMiddleware('seller'), SpotController.getMinSlotsPerType);
 
 // Admin routes
 router.put('/:id/approve', authMiddleware, roleMiddleware('admin'), SpotController.approveSpot);

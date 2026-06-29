@@ -226,12 +226,11 @@ const getSpotById = async (req, res) => {
 const updateSpot = async (req, res) => {
   try {
     const updates = { ...req.body };
-
+    // ── Images ────────────────────────────────────────────────────────────────
     const uploadedImageUrls =
       Array.isArray(req.files) && req.files.length > 0
         ? req.files.map((file) => file.path)
         : null;
-
     if (uploadedImageUrls) {
       updates.imageUrls = uploadedImageUrls;
     } else if (updates.imageUrls !== undefined) {
@@ -239,55 +238,100 @@ const updateSpot = async (req, res) => {
         .map((item) => String(item).trim())
         .filter((item) => item.length > 0);
     }
-    
-    // Lot counts and vehicle type structure are locked for now.
-    // Ignore these fields even if sent by the client.
-    delete updates.vehicleTypes;
-    delete updates.slotsPerType;
-    delete updates.totalSlots;
-
+    // ── Fetch current spot ────────────────────────────────────────────────────
+    const currentSpot = await Spot.findById(req.params.id);
+    if (!currentSpot || currentSpot.owner_id !== req.user.id) {
+      return res.status(404).json({ error: 'Spot not found or you do not own this spot.' });
+    }
+    // ── Pricing update ────────────────────────────────────────────────────────
     if (updates.pricesPerHour !== undefined) {
-      const currentSpot = await Spot.findById(req.params.id);
-
-      if (!currentSpot || currentSpot.owner_id !== req.user.id) {
-        return res.status(404).json({
-          error: 'Spot not found or you do not own this spot.'
-        });
-      }
-
-      const currentVehicleTypes = Array.isArray(currentSpot.vehicle_types)
-        ? currentSpot.vehicle_types
-        : [];
-
       const parsedPrices = toArray(updates.pricesPerHour).map((price) => Number(price));
-
-      if (parsedPrices.length !== currentVehicleTypes.length) {
-        return res.status(400).json({
-          error: 'Hourly rates count must match the existing vehicle type count.'
-        });
-      }
-
       const hasInvalidPrice = parsedPrices.some((price) => !Number.isFinite(price) || price <= 0);
-
       if (hasInvalidPrice) {
-        return res.status(400).json({
-          error: 'Each hourly rate must be a number greater than 0.'
-        });
+        return res.status(400).json({ error: 'Each hourly rate must be a number greater than 0.' });
       }
-
       updates.pricesPerHour = parsedPrices.map((price) => parseFloat(price));
     }
+    // ── Slot-count / vehicle-type update with sweep-line validation ───────────
+    if (updates.vehicleTypes !== undefined || updates.slotsPerType !== undefined) {
+      const rawVehicleTypes = toArray(updates.vehicleTypes).map((t) => String(t).trim());
+      const rawSlotsPerType = toArray(updates.slotsPerType).map((s) => parseInt(s, 10));
+      const rawPricesPerHour = updates.pricesPerHour
+        ? toArray(updates.pricesPerHour).map((p) => parseFloat(p))
+        : toArray(currentSpot.prices_per_hour).map((p) => parseFloat(p));
+      if (rawVehicleTypes.length !== rawSlotsPerType.length) {
+        return res.status(400).json({ error: 'vehicleTypes and slotsPerType arrays must be the same length.' });
+      }
+      // Fetch all future/active bookings for this spot to ensure no type is reduced below its max concurrent bookings
+      const now = new Date();
+      const bookingsResult = await query(
+        `SELECT vehicle_type, start_time, end_time
+         FROM bookings
+         WHERE spot_id = $1
+           AND booking_status IN ('pending', 'confirmed', 'active')
+           AND end_time > $2`,
+        [req.params.id, now]
+      );
 
-    const spot = await Spot.update(req.params.id, req.user.id, updates);
+      // Group by vehicle type
+      const groups = {};
+      for (const b of bookingsResult.rows) {
+        const key = b.vehicle_type.trim().toLowerCase();
+        if (!groups[key]) groups[key] = [];
+        groups[key].push({ start: new Date(b.start_time), end: new Date(b.end_time) });
+      }
 
-    if (!spot) {
-      return res.status(404).json({
-        error: 'Spot not found or you do not own this spot.'
-      });
+      // Check maxOccupied against new slots for every vehicle type that has upcoming bookings
+      for (const [type, intervals] of Object.entries(groups)) {
+        const events = [];
+        for (const iv of intervals) {
+          events.push({ time: iv.start.getTime(), delta: 1 });
+          events.push({ time: iv.end.getTime(),   delta: -1 });
+        }
+        events.sort((a, b) => {
+          const timeDiff = a.time.getTime() - b.time.getTime();
+          if (timeDiff === 0) return a.delta - b.delta;
+          return timeDiff;
+        });
+
+        let current = 0;
+        let maxOccupied = 0;
+        for (const ev of events) {
+          current += ev.delta;
+          if (current > maxOccupied) maxOccupied = current;
+        }
+
+        if (maxOccupied > 0) {
+          // Find this vehicle type in the submitted new slots
+          const idx = rawVehicleTypes.findIndex((t) => t.toLowerCase() === type);
+          const newSlots = idx !== -1 ? rawSlotsPerType[idx] : 0;
+
+          if (newSlots < maxOccupied) {
+            return res.status(400).json({
+              error: `Cannot reduce ${type} slots to ${newSlots}. Maximum concurrent bookings is ${maxOccupied}.`,
+              vehicleType: type,
+              maxOccupied,
+            });
+          }
+        }
+      }
+      // All checks passed — persist slot structure
+      updates.vehicleTypes  = rawVehicleTypes;
+      updates.slotsPerType  = rawSlotsPerType;
+      updates.pricesPerHour = rawPricesPerHour;
+      updates.totalSlots    = rawSlotsPerType.reduce((sum, s) => sum + s, 0);
+    } else {
+      // No slot changes sent — don't accidentally clear them
+      delete updates.vehicleTypes;
+      delete updates.slotsPerType;
+      delete updates.totalSlots;
     }
-
+    // ── Persist ───────────────────────────────────────────────────────────────
+    const spot = await Spot.update(req.params.id, req.user.id, updates);
+    if (!spot) {
+      return res.status(404).json({ error: 'Spot not found or you do not own this spot.' });
+    }
     res.json({ message: 'Spot updated.', spot });
-
   } catch (error) {
     console.error('Update spot error:', error.message);
     res.status(500).json({ error: 'Failed to update spot.' });
@@ -454,6 +498,55 @@ const getPendingSpots = async (req, res) => {
   }
 };
 
+// ============================================
+// GET /api/spots/:id/min-slots — Min safe slots per vehicle type (seller only)
+// ============================================
+const getMinSlotsPerType = async (req, res) => {
+  try {
+    const spotId = req.params.id;
+    const now = new Date();
+    // Get all future/active bookings for this spot
+    const bookingsResult = await query(
+      `SELECT vehicle_type, start_time, end_time
+       FROM bookings
+       WHERE spot_id = $1
+         AND booking_status IN ('pending', 'confirmed', 'active')
+         AND end_time > $2`,
+      [spotId, now]
+    );
+    // Group by vehicle type and run sweep-line
+    const groups = {};
+    for (const b of bookingsResult.rows) {
+      const key = b.vehicle_type.trim().toLowerCase();
+      if (!groups[key]) groups[key] = [];
+      groups[key].push({ start: new Date(b.start_time), end: new Date(b.end_time) });
+    }
+    const minSlotsPerType = {};
+    for (const [type, intervals] of Object.entries(groups)) {
+      const events = [];
+      for (const iv of intervals) {
+        events.push({ time: iv.start.getTime(), delta: 1 });
+        events.push({ time: iv.end.getTime(),   delta: -1 });
+      }
+      events.sort((a, b) => {
+        const timeDiff = a.time.getTime() - b.time.getTime();
+        if (timeDiff === 0) return a.delta - b.delta;
+        return timeDiff;
+      });
+      let current = 0, maxOccupied = 0;
+      for (const ev of events) {
+        current += ev.delta;
+        if (current > maxOccupied) maxOccupied = current;
+      }
+      minSlotsPerType[type] = maxOccupied;
+    }
+    res.json({ minSlotsPerType });
+  } catch (error) {
+    console.error('Get min slots error:', error.message);
+    res.status(500).json({ error: 'Failed to compute min slots.' });
+  }
+};
+
 module.exports = {
   createSpot,
   getSpots,
@@ -464,5 +557,6 @@ module.exports = {
   rejectSpot,
   deleteSpot,
   adminToggleSpot,
-  getPendingSpots
+  getPendingSpots,
+  getMinSlotsPerType
 };
