@@ -276,6 +276,7 @@ const updateSpot = async (req, res) => {
       // Group by vehicle type
       const groups = {};
       for (const b of bookingsResult.rows) {
+        if (!b.vehicle_type) continue;
         const key = b.vehicle_type.trim().toLowerCase();
         if (!groups[key]) groups[key] = [];
         groups[key].push({ start: new Date(b.start_time), end: new Date(b.end_time) });
@@ -289,7 +290,7 @@ const updateSpot = async (req, res) => {
           events.push({ time: iv.end.getTime(),   delta: -1 });
         }
         events.sort((a, b) => {
-          const timeDiff = a.time.getTime() - b.time.getTime();
+          const timeDiff = a.time - b.time;
           if (timeDiff === 0) return a.delta - b.delta;
           return timeDiff;
         });
@@ -517,6 +518,7 @@ const getMinSlotsPerType = async (req, res) => {
     // Group by vehicle type and run sweep-line
     const groups = {};
     for (const b of bookingsResult.rows) {
+      if (!b.vehicle_type) continue;
       const key = b.vehicle_type.trim().toLowerCase();
       if (!groups[key]) groups[key] = [];
       groups[key].push({ start: new Date(b.start_time), end: new Date(b.end_time) });
@@ -529,7 +531,7 @@ const getMinSlotsPerType = async (req, res) => {
         events.push({ time: iv.end.getTime(),   delta: -1 });
       }
       events.sort((a, b) => {
-        const timeDiff = a.time.getTime() - b.time.getTime();
+        const timeDiff = a.time - b.time;
         if (timeDiff === 0) return a.delta - b.delta;
         return timeDiff;
       });
@@ -547,6 +549,118 @@ const getMinSlotsPerType = async (req, res) => {
   }
 };
 
+// ============================================
+// POST /api/spots/:id/check-conflicts — Check block conflicts (seller only)
+// ============================================
+const checkSpotConflicts = async (req, res) => {
+  try {
+    const spotId = req.params.id;
+    const { startDateTime, endDateTime } = req.body;
+    
+    if (!startDateTime || !endDateTime) {
+      return res.status(400).json({ error: 'startDateTime and endDateTime are required.' });
+    }
+
+    const start = new Date(startDateTime);
+    const end = new Date(endDateTime);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start >= end) {
+      return res.status(400).json({ error: 'Invalid start or end time.' });
+    }
+
+    // Overlap condition: booking.start_time < block.end_time AND booking.end_time > block.start_time
+    const conflictResult = await query(
+      `SELECT id 
+       FROM bookings 
+       WHERE spot_id = $1 
+         AND booking_status IN ('pending', 'confirmed', 'active')
+         AND start_time < $3 
+         AND end_time > $2
+       LIMIT 1`,
+      [spotId, start, end]
+    );
+
+    res.json({ hasConflict: conflictResult.rows.length > 0 });
+  } catch (error) {
+    console.error('Check conflicts error:', error.message);
+    res.status(500).json({ error: 'Failed to check conflicts.' });
+  }
+};
+
+// ============================================
+// POST /api/spots/:id/block — Block spot (seller only)
+// ============================================
+const blockSpot = async (req, res) => {
+  try {
+    const spotId = req.params.id;
+    const { startDateTime, endDateTime, reason } = req.body;
+
+    if (!startDateTime || !endDateTime) {
+      return res.status(400).json({ error: 'startDateTime and endDateTime are required.' });
+    }
+
+    const start = new Date(startDateTime);
+    const end = new Date(endDateTime);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start >= end) {
+      return res.status(400).json({ error: 'Invalid start or end time.' });
+    }
+
+    const spot = await Spot.findById(spotId);
+    if (!spot || spot.owner_id !== req.user.id) {
+      return res.status(404).json({ error: 'Spot not found or unauthorized.' });
+    }
+
+    if (spot.is_blocked_by_seller) {
+      return res.status(400).json({ error: 'Spot is already blocked. Wait for the current block to end.' });
+    }
+
+    // Double check conflicts
+    const conflictResult = await query(
+      `SELECT id FROM bookings WHERE spot_id = $1 AND booking_status IN ('pending', 'confirmed', 'active') AND start_time < $3 AND end_time > $2 LIMIT 1`,
+      [spotId, start, end]
+    );
+
+    if (conflictResult.rows.length > 0) {
+      return res.status(409).json({ error: 'Cannot block spot due to overlapping active bookings.' });
+    }
+
+    await query(
+      `UPDATE spots SET is_blocked_by_seller = true, block_start_time = $1, block_end_time = $2, block_reason = $3, updated_at = NOW() WHERE id = $4`,
+      [start, end, reason || null, spotId]
+    );
+
+    res.json({ success: true, message: 'Spot blocked successfully' });
+  } catch (error) {
+    console.error('Block spot error:', error.message);
+    res.status(500).json({ error: 'Failed to block spot.' });
+  }
+};
+
+// ============================================
+// POST /api/spots/:id/unblock — Unblock spot (seller only)
+// ============================================
+const unblockSpot = async (req, res) => {
+  try {
+    const spotId = req.params.id;
+
+    const spot = await Spot.findById(spotId);
+    if (!spot || spot.owner_id !== req.user.id) {
+      return res.status(404).json({ error: 'Spot not found or unauthorized.' });
+    }
+
+    await query(
+      `UPDATE spots SET is_blocked_by_seller = false, block_start_time = null, block_end_time = null, block_reason = null, updated_at = NOW() WHERE id = $1`,
+      [spotId]
+    );
+
+    res.json({ success: true, message: 'Spot unblocked successfully' });
+  } catch (error) {
+    console.error('Unblock spot error:', error.message);
+    res.status(500).json({ error: 'Failed to unblock spot.' });
+  }
+};
+
 module.exports = {
   createSpot,
   getSpots,
@@ -558,5 +672,8 @@ module.exports = {
   deleteSpot,
   adminToggleSpot,
   getPendingSpots,
-  getMinSlotsPerType
+  getMinSlotsPerType,
+  checkSpotConflicts,
+  blockSpot,
+  unblockSpot
 };
