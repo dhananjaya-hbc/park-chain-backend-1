@@ -222,6 +222,7 @@ const verifyPayment = async (req, res) => {
       // Driver REJECTED payment
       const Booking = require('../models/Booking');
       await Booking.updatePaymentStatus(bookingId, 'failed');
+      await Booking.updateStatus(bookingId, 'cancelled');
 
       return res.status(400).json({
         error: 'Payment not signed.',
@@ -346,6 +347,7 @@ const verifyPayment = async (req, res) => {
       // ── Seller payment FAILED ─────────────────────
       console.error('Admin → Seller payment failed');
       await Booking.updatePaymentStatus(bookingId, 'failed');
+      await Booking.updateStatus(bookingId, 'cancelled');
 
       res.status(500).json({
         error: 'Seller payout failed. Please contact support.'
