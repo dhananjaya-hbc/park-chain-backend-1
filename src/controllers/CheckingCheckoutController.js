@@ -9,7 +9,7 @@ const { calculateDistance } = require('../utils/geoUtils');
 const checkIn = async (req, res) => {
   try {
     const { driverLocation } = req.body;
-    const CHECK_IN_RADIUS_TOLERANCE_METERS = 10;
+    const CHECK_IN_RADIUS_TOLERANCE_METERS = 40;
 
     if (!driverLocation || !driverLocation.lat || !driverLocation.lng) {
       return res.status(400).json({
@@ -23,12 +23,6 @@ const checkIn = async (req, res) => {
       return res.status(403).json({ error: 'This is not your booking.' });
     }
 
-    if (existing.booking_status !== 'confirmed') {
-      return res.status(400).json({
-        error: `Cannot check in. Booking status is: ${existing.booking_status}. Must be 'confirmed'.`
-      });
-    }
-
     const distance = calculateDistance(
       parseFloat(driverLocation.lat),
       parseFloat(driverLocation.lng),
@@ -38,13 +32,17 @@ const checkIn = async (req, res) => {
 
     if (distance > CHECK_IN_RADIUS_TOLERANCE_METERS) {
       return res.status(400).json({
-        error: 'Too far from the spot. Please get closer to check-in.',
+        error: `Too far from the spot. Calculated distance: ${Math.round(distance)} meters.`,
         currentDistance: Math.round(distance)
       });
     }
 
     const booking = await Booking.checkIn(req.params.id);
-    if (!booking) return res.status(400).json({ error: 'Check-in failed.' });
+    if (!booking) {
+      return res.status(409).json({
+        error: 'Booking has already been checked in or is invalid.'
+      });
+    }
 
     res.json({
       message: 'Checked in successfully. Parking timer started!',
