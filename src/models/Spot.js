@@ -67,9 +67,22 @@ class Spot {
   // ============================================
   static async findAvailable() {
     const result = await query(
-      `SELECT s.*, u.name AS owner_name
+      `WITH ReviewStats AS (
+         SELECT 
+           spot_id, 
+           AVG(rating) AS average_rating,
+           COUNT(id) AS total_reviews
+         FROM reviews
+         GROUP BY spot_id
+       )
+       SELECT 
+         s.*, 
+         u.name AS owner_name,
+         COALESCE(rs.average_rating, 0) AS average_rating,
+         COALESCE(rs.total_reviews, 0) AS total_reviews
        FROM spots s
        JOIN users u ON s.owner_id = u.id
+       LEFT JOIN ReviewStats rs ON s.id = rs.spot_id
        WHERE s.is_available = true
          AND s.is_approved = true
        ORDER BY s.created_at DESC`
